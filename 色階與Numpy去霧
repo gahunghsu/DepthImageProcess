@@ -1,0 +1,56 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+
+#色階調整
+img = cv2.imread('midas/TD_148_persimmon_frame_00001_high.png',0)
+equ = cv2.equalizeHist(img)
+stack = np.hstack((img,equ))
+display(Image.fromarray(stack))
+
+#自動色階影像調整
+img = cv2.imread('midas/TD_148_persimmon_frame_00001_high.png',0)
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+cl1 = clahe.apply(img)
+
+#numpy去霧
+def ComputeMinLevel(hist, pnum):
+    index = np.add.accumulate(hist)
+    return np.argwhere(index>pnum * 8.3 * 0.01)[0][0]
+
+def ComputeMaxLevel(hist, pnum):
+    hist_0 = hist[::-1]
+    Iter_sum = np.add.accumulate(hist_0)
+    index = np.argwhere(Iter_sum > (pnum * 2.2 * 0.01))[0][0]
+    return 255-index
+
+def LinearMap(minlevel, maxlevel):
+    if (minlevel >= maxlevel):
+        return []
+    else:
+        index = np.array(list(range(256)))
+        screenNum = np.where(index<minlevel,0,index)
+        screenNum = np.where(screenNum> maxlevel,255,screenNum)
+        for i in range(len(screenNum)):
+            if screenNum[i]> 0 and screenNum[i] < 255:
+                screenNum[i] = (i - minlevel) / (maxlevel - minlevel) * 255
+        return screenNum
+
+def CreateNewImg(img):
+    h, w, d = img.shape
+    newimg = np.zeros([h, w, d])
+    for i in range(d):
+        imghist = np.bincount(img[:, :, i].reshape(1, -1)[0])
+        minlevel = ComputeMinLevel(imghist,  h * w)
+        maxlevel = ComputeMaxLevel(imghist, h * w)
+        screenNum = LinearMap(minlevel, maxlevel)
+        if (screenNum.size == 0):
+            continue
+        for j in range(h):
+            newimg[j, :, i] = screenNum[img[j, :, i]]
+    return newimg
+
+img = cv2.imread('TD_148_persimmon_frame_00050.png')
+newimg = CreateNewImg(img)
+display(Image.fromarray(newimg.astype(np.uint8)[:,:,::-1]))
